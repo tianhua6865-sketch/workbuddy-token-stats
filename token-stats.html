@@ -309,12 +309,12 @@
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-label">总使用量</div>
-                <div class="stat-value" id="totalTokens">4,600,507</div>
+                <div class="stat-value" id="totalTokens">5,349,071</div>
                 <div class="stat-sub">Tokens</div>
             </div>
             <div class="stat-card success">
                 <div class="stat-label">缓存复用率</div>
-                <div class="stat-value" id="cacheRate">90.6%</div>
+                <div class="stat-value" id="cacheRate">90.0%</div>
                 <div class="stat-sub">节省成本</div>
             </div>
             <div class="stat-card warning">
@@ -324,7 +324,7 @@
             </div>
             <div class="stat-card">
                 <div class="stat-label">日均使用</div>
-                <div class="stat-value" id="dailyAvg">153,350</div>
+                <div class="stat-value" id="dailyAvg">178,302</div>
                 <div class="stat-sub">Tokens/天</div>
             </div>
         </div>
@@ -366,18 +366,18 @@
                         <tr>
                             <td><span class="week-tag">2026-W20</span></td>
                             <td>05-18 ~ 05-24</td>
-                            <td><span class="model-tag model-auto-pro">auto-pro</span></td>
-                            <td class="num">1,118,621</td>
-                            <td class="num">2,760</td>
-                            <td class="num">1,003,461</td>
-                            <td class="num">1,121,381</td>
+                            <td><span class="model-tag model-auto">auto</span> + <span class="model-tag model-auto-pro">auto-pro</span></td>
+                            <td class="num">1,863,645</td>
+                            <td class="num">6,300</td>
+                            <td class="num">1,649,850</td>
+                            <td class="num">1,869,945</td>
                         </tr>
                         <tr class="total-row">
                             <td colspan="3">合计</td>
-                            <td class="num">4,558,812</td>
-                            <td class="num">41,695</td>
-                            <td class="num">4,169,387</td>
-                            <td class="num">4,600,507</td>
+                            <td class="num">5,303,836</td>
+                            <td class="num">45,235</td>
+                            <td class="num">4,815,776</td>
+                            <td class="num">5,349,071</td>
                         </tr>
                     </tbody>
                 </table>
@@ -407,17 +407,15 @@
     </div>
 
     <script>
-        // 数据
+        // 数据 - 2026-04-19 ~ 2026-05-19
         const weeklyData = {
-            '2026-W18': { input: 3440191, output: 38935, cached: 3165926, total: 3479126 },
-            '2026-W20': { input: 1118621, output: 2760, cached: 1003461, total: 1121381 }
+            'W18': { input: 3440191, output: 38935, cached: 3165926, total: 3479126 },
+            'W20': { input: 1863645, output: 6300, cached: 1649850, total: 1869945 }
         };
 
-        const weekLabels = ['2026-W18\n(05-04~05-10)', '2026-W20\n(05-18~05-24)'];
-        const totalData = [3479126, 1121381];
-        const inputData = [3440191, 1118621];
-        const outputData = [38935, 2760];
-        const cachedData = [3165926, 1003461];
+        const inputData = [3440191, 1863645];
+        const outputData = [38935, 6300];
+        const cachedData = [3165926, 1649850];
 
         // 绘制图表
         function drawChart() {
