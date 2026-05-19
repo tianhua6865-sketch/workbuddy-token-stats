@@ -103,30 +103,60 @@ async function syncLocalData() {
     }
     
     const btn = document.getElementById('syncBtn');
-    btn.disabled = true;
-    btn.textContent = '⏳ 同步中...';
+    const originalText = btn.textContent;
+    
+    async function doSync() {
+        btn.disabled = true;
+        btn.textContent = '⏳ 同步中...';
+        
+        try {
+            const url = 'http://localhost:8081/api/stats?start=' + s + '&end=' + e;
+            const r = await fetch(url);
+            if (!r.ok) throw new Error('SERVICE_NOT_RUNNING');
+            const d = await r.json();
+            
+            document.getElementById('totalTokens').textContent = fmt(d.summary.total);
+            document.getElementById('cacheRate').textContent = (d.summary.cacheRate || 0) + '%';
+            document.getElementById('activeWeeks').textContent = d.summary.activeWeeks || 0;
+            document.getElementById('dailyAvg').textContent = fmt(d.summary.dailyAvg);
+            document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString() + ' (本地真实数据)';
+            
+            updateChart(d.weeks || []);
+            updateTable(d.weeks || [], d.summary);
+            generateAnalysis(d);
+        } catch (err) {
+            if (err.message === 'SERVICE_NOT_RUNNING') {
+                throw err;
+            } else {
+                document.getElementById('tableContainer').innerHTML = '<div class="error">⚠️ 同步失败: ' + err.message + '</div>';
+            }
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    }
     
     try {
-        const url = 'http://localhost:8081/api/stats?start=' + s + '&end=' + e;
-        const r = await fetch(url);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const d = await r.json();
-        
-        document.getElementById('totalTokens').textContent = fmt(d.summary.total);
-        document.getElementById('cacheRate').textContent = (d.summary.cacheRate || 0) + '%';
-        document.getElementById('activeWeeks').textContent = d.summary.activeWeeks || 0;
-        document.getElementById('dailyAvg').textContent = fmt(d.summary.dailyAvg);
-        document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString() + ' (本地真实数据)';
-        
-        updateChart(d.weeks || []);
-        updateTable(d.weeks || [], d.summary);
-        generateAnalysis(d);
+        await doSync();
     } catch (err) {
-        console.error('Error:', err);
-        document.getElementById('tableContainer').innerHTML = '<div class="error">⚠️ 本地服务未启动<br><small>请先在终端运行: <code>python3 local_data_server.py</code></small></div>';
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '📱 同步本地数据';
+        if (err.message === 'SERVICE_NOT_RUNNING') {
+            btn.disabled = false;
+            btn.textContent = originalText;
+            
+            // 打开终端并显示命令
+            const cmd = 'cd /Users/tianhuali/WorkBuddy/2026-05-19-task-3 && python3 local_data_server.py';
+            const msg = encodeURIComponent('请在终端中运行以下命令，然后再次点击「同步本地数据」：\n\n' + cmd);
+            
+            // 打开终端并执行命令
+            window.open('x-terminal-emulator:' + cmd, '_blank');
+            
+            // 同时显示提示
+            const hint = document.createElement('div');
+            hint.className = 'tips';
+            hint.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1000;max-width:500px;background:white;padding:30px;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,0.3)';
+            hint.innerHTML = '<h4 style="color:#10b981;margin-bottom:16px">📱 启动本地数据服务</h4><p style="margin-bottom:16px;color:#374151">请在打开的终端窗口中运行以下命令：</p><code style="display:block;background:#f3f4f6;padding:16px;border-radius:8px;font-family:monospace;margin-bottom:20px">' + cmd + '</code><button onclick="this.parentElement.remove()" style="padding:10px 24px;background:#10b981;color:white;border:none;border-radius:8px;cursor:pointer">好的，我已启动</button>';
+            document.body.appendChild(hint);
+        }
     }
 }
 
