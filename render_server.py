@@ -67,21 +67,25 @@ tr:hover{background:#f8fafc}
 <div class="card">
 <div class="card-title">📂 数据源配置</div>
 <div class="date-picker">
-<div style="display:flex;align-items:center;gap:8px;flex:1">
+<div style="display:flex;align-items:center;gap:12px">
 <label style="font-weight:500;color:#64748b;font-size:0.9rem">数据路径：</label>
-<input type="text" id="tracesPath" placeholder="/Users/你的用户名/.workbuddy/traces" style="flex:1;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;font-family:monospace">
+<button class="btn" onclick="selectFolder()" style="background:#6366f1">📁 选择文件夹</button>
+<input type="text" id="tracesPath" readonly placeholder="未选择（使用默认路径）" style="flex:1;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;background:#f8fafc;color:#64748b">
 </div>
-<button class="btn" id="refreshBtn" onclick="loadData()">🔄 刷新数据</button>
-<span id="dataSource" style="font-size:0.85rem;color:#64748b"></span>
 </div>
-<div style="margin-top:8px">
+<div style="margin-top:12px">
 <label style="font-size:0.8rem;color:#64748b">日期范围：</label>
 <div class="date-input" style="display:inline-flex;margin-left:8px"><input type="date" id="startDate" value="{{START_DATE}}"></div>
 <span style="margin:0 8px;color:#64748b">至</span>
 <div class="date-input" style="display:inline-flex"><input type="date" id="endDate" value="{{END_DATE}}"></div>
+<button class="btn" id="refreshBtn" onclick="loadData()" style="margin-left:16px">🔄 刷新数据</button>
+<span id="dataSource" style="font-size:0.85rem;color:#64748b;margin-left:12px"></span>
 </div>
 <div class="last-update" id="lastUpdate"></div>
 </div>
+
+<!-- 隐藏的文件夹选择器 -->
+<input type="file" id="folderPicker" webkitdirectory style="display:none" onchange="handleFolderSelect(this)">
 
 <div class="stats-grid">
 <div class="stat-card"><div class="stat-label">总使用量</div><div class="stat-value" id="totalTokens">--</div><div class="stat-sub">Tokens</div></div>
@@ -99,13 +103,25 @@ tr:hover{background:#f8fafc}
 let chart = null;
 
 // 从 localStorage 读取保存的路径
-const savedPath = localStorage.getItem('tracesPath');
-const defaultPath = savedPath || (() => {
-    // 获取当前用户的默认路径
-    const home = '/Users/' + (window.navigator.userAgent.includes('Mac') ? 
-        (navigator.platform.includes('Mac') ? '你的用户名' : '你的用户名') : '你的用户名');
-    return home + '/.workbuddy/traces';
-})();
+const savedPath = localStorage.getItem('tracesPath') || '';
+
+function selectFolder() {
+    document.getElementById('folderPicker').click();
+}
+
+function handleFolderSelect(input) {
+    if (input.files && input.files.length > 0) {
+        // 获取文件夹路径
+        const fullPath = input.files[0].webkitRelativePath || input.files[0].path;
+        // 提取文件夹路径（去掉文件名部分）
+        const folderPath = fullPath.split('/').slice(0, -1).join('/') || fullPath;
+        
+        if (folderPath) {
+            document.getElementById('tracesPath').value = '/' + folderPath;
+            localStorage.setItem('tracesPath', '/' + folderPath);
+        }
+    }
+}
 
 function fmt(n) {
     return (n || 0).toLocaleString();
@@ -243,12 +259,8 @@ function generateAnalysis(d) {
 // 初始化路径输入框
 window.addEventListener('DOMContentLoaded', function() {
     const pathInput = document.getElementById('tracesPath');
-    // 如果有保存的路径则显示
     if (savedPath) {
         pathInput.value = savedPath;
-    } else {
-        // 显示默认路径提示
-        pathInput.placeholder = '/Users/tianhua/.workbuddy/traces';
     }
     loadData();
 });
