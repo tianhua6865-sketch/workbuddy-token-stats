@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 WorkBuddy Token Stats 服务器 - 云端部署版
-包含示例数据，方便演示和测试
 """
 
 from flask import Flask, jsonify, send_from_directory, request
@@ -98,7 +97,7 @@ def parse_traces(start_date, end_date):
             monday = first_day - timedelta(days=first_day.weekday()) + timedelta(weeks=week_num - 1)
             sunday = monday + timedelta(days=6)
             date_range = f"{monday.strftime('%m-%d')} ~ {sunday.strftime('%m-%d')}"
-        except:
+        except Exception:
             date_range = ""
 
         data = weekly_data[week_key]
@@ -113,9 +112,42 @@ def parse_traces(start_date, end_date):
 
     return result
 
+def get_sample_data(start_date, end_date):
+    """生成示例数据"""
+    sample_data = []
+
+    today = datetime.now().date()
+    for i in range(5):
+        week_date = today - timedelta(weeks=i)
+        monday, sunday = get_week_range(week_date)
+
+        # 只添加在日期范围内的周
+        if start_date <= sunday.date() and end_date >= monday.date():
+            week_key = format_week_number(week_date)
+
+            # 生成随机但合理的示例数据
+            base_input = 500000 + (4 - i) * 150000
+            base_output = 200000 + (4 - i) * 80000
+            base_cached = int(base_input * 0.35)
+
+            sample_data.append({
+                'week': week_key,
+                'dateRange': f"{monday.strftime('%m-%d')} ~ {sunday.strftime('%m-%d')}",
+                'input': base_input,
+                'output': base_output,
+                'cached': base_cached,
+                'total': base_input + base_output
+            })
+
+    return sample_data
+
 @app.route('/')
 def index():
     return send_from_directory('.', 'token-stats.html')
+
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'ok', 'message': 'WorkBuddy Token Stats is running'})
 
 @app.route('/api/stats')
 def get_stats():
@@ -156,50 +188,14 @@ def get_stats():
             'activeWeeks': len(data),
             'dailyAvg': total_all // days if days > 0 else 0,
             'days': days
-        },
-        'isSampleData': True
+        }
     })
-
-def get_sample_data(start_date, end_date):
-    """生成示例数据"""
-    sample_data = []
-
-    # 生成最近5周的示例数据
-    today = datetime.now().date()
-    for i in range(5):
-        week_date = today - timedelta(weeks=i)
-        monday, sunday = get_week_range(week_date)
-
-        # 只添加在日期范围内的周
-        if start_date <= sunday.date() and end_date >= monday.date():
-            week_key = format_week_number(week_date)
-
-            # 生成随机但合理的示例数据
-            base_input = 500000 + (4 - i) * 150000  # 越近的周数据越多
-            base_output = 200000 + (4 - i) * 80000
-            base_cached = int(base_input * 0.35)
-
-            sample_data.append({
-                'week': week_key,
-                'dateRange': f"{monday.strftime('%m-%d')} ~ {sunday.strftime('%m-%d')}",
-                'input': base_input,
-                'output': base_output,
-                'cached': base_cached,
-                'total': base_input + base_output
-            })
-
-    return sample_data
-
-@app.route('/health')
-def health_check():
-    return jsonify({'status': 'ok', 'message': 'WorkBuddy Token Stats is running'})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     print("=" * 50)
-    print("  🚀 WorkBuddy Token Stats Server")
+    print("  WorkBuddy Token Stats Server")
     print("=" * 50)
-    print()
-    print(f"  📊 Port: {port}")
-    print("==================================")
+    print(f"  Port: {port}")
+    print("=" * 50)
     app.run(host='0.0.0.0', port=port, debug=False)
