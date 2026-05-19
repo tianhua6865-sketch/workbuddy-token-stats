@@ -228,6 +228,9 @@ def stats():
                     'total': 700000 + (5-i) * 180000
                 })
         
+        # 按时间顺序排序（最早在前）
+        weeks.sort(key=lambda w: w['week'])
+        
         total = sum(w['total'] for w in weeks)
         total_input = sum(w['input'] for w in weeks)
         total_output = sum(w['output'] for w in weeks)
