@@ -65,12 +65,20 @@ tr:hover{background:#f8fafc}
 <header><h1>📊 WorkBuddy Token 使用量统计</h1><p>分析 Litianhua 的 AI 使用情况，优化成本支出</p></header>
 
 <div class="card">
-<div class="card-title">日期范围选择</div>
+<div class="card-title">📂 数据源配置</div>
 <div class="date-picker">
-<div class="date-input"><label>开始日期：</label><input type="date" id="startDate" value="{{START_DATE}}"></div>
-<div class="date-input"><label>结束日期：</label><input type="date" id="endDate" value="{{END_DATE}}"></div>
+<div style="display:flex;align-items:center;gap:8px;flex:1">
+<label style="font-weight:500;color:#64748b;font-size:0.9rem">数据路径：</label>
+<input type="text" id="tracesPath" placeholder="/Users/你的用户名/.workbuddy/traces" style="flex:1;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;font-family:monospace">
+</div>
 <button class="btn" id="refreshBtn" onclick="loadData()">🔄 刷新数据</button>
 <span id="dataSource" style="font-size:0.85rem;color:#64748b"></span>
+</div>
+<div style="margin-top:8px">
+<label style="font-size:0.8rem;color:#64748b">日期范围：</label>
+<div class="date-input" style="display:inline-flex;margin-left:8px"><input type="date" id="startDate" value="{{START_DATE}}"></div>
+<span style="margin:0 8px;color:#64748b">至</span>
+<div class="date-input" style="display:inline-flex"><input type="date" id="endDate" value="{{END_DATE}}"></div>
 </div>
 <div class="last-update" id="lastUpdate"></div>
 </div>
@@ -89,6 +97,15 @@ tr:hover{background:#f8fafc}
 
 <script>
 let chart = null;
+
+// 从 localStorage 读取保存的路径
+const savedPath = localStorage.getItem('tracesPath');
+const defaultPath = savedPath || (() => {
+    // 获取当前用户的默认路径
+    const home = '/Users/' + (window.navigator.userAgent.includes('Mac') ? 
+        (navigator.platform.includes('Mac') ? '你的用户名' : '你的用户名') : '你的用户名');
+    return home + '/.workbuddy/traces';
+})();
 
 function fmt(n) {
     return (n || 0).toLocaleString();
@@ -109,18 +126,29 @@ function renderData(d, source) {
 async function loadData() {
     const s = document.getElementById('startDate').value;
     const e = document.getElementById('endDate').value;
+    const path = document.getElementById('tracesPath').value.trim();
+    
     if (!s || !e) {
         alert('请选择日期范围');
         return;
     }
+    
+    // 保存路径到 localStorage
+    if (path) {
+        localStorage.setItem('tracesPath', path);
+    }
+    
     const btn = document.getElementById('refreshBtn');
     btn.disabled = true;
     btn.textContent = '⏳ 加载中...';
     
     // 先尝试获取本地数据
     try {
-        const url = 'http://localhost:8081/api/stats?start=' + s + '&end=' + e;
-        const r = await fetch(url, { timeout: 3000 });
+        let url = 'http://localhost:8081/api/stats?start=' + s + '&end=' + e;
+        if (path) {
+            url += '&path=' + encodeURIComponent(path);
+        }
+        const r = await fetch(url, { timeout: 5000 });
         if (r.ok) {
             const d = await r.json();
             renderData(d, '本地真实数据');
@@ -212,8 +240,16 @@ function generateAnalysis(d) {
     document.getElementById('analysisContent').innerHTML = html;
 }
 
-// 页面加载后自动获取数据
+// 初始化路径输入框
 window.addEventListener('DOMContentLoaded', function() {
+    const pathInput = document.getElementById('tracesPath');
+    // 如果有保存的路径则显示
+    if (savedPath) {
+        pathInput.value = savedPath;
+    } else {
+        // 显示默认路径提示
+        pathInput.placeholder = '/Users/tianhua/.workbuddy/traces';
+    }
     loadData();
 });
 </script>
