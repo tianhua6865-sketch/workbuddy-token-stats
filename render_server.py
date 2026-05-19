@@ -58,7 +58,7 @@ tr:hover{background:#f8fafc}
 </head>
 <body>
 <div class="container">
-<header><h1>📊 WorkBuddy Token 使用量统计</h1><p>分析您的 AI 使用情况，优化成本支出</p></header>
+<header><h1>📊 WorkBuddy Token 使用量统计</h1><p>分析 Litianhua 的 AI 使用情况，优化成本支出</p></header>
 
 <div class="card">
 <div class="card-title">日期范围选择</div>
