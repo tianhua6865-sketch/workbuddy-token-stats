@@ -63,8 +63,8 @@ tr:hover{background:#f8fafc}
 <div class="card">
 <div class="card-title">日期范围选择</div>
 <div class="date-picker">
-<div class="date-input"><label>开始日期：</label><input type="date" id="startDate" value="2026-04-01"></div>
-<div class="date-input"><label>结束日期：</label><input type="date" id="endDate" value="2026-05-19"></div>
+<div class="date-input"><label>开始日期：</label><input type="date" id="startDate" value="{{START_DATE}}"></div>
+<div class="date-input"><label>结束日期：</label><input type="date" id="endDate" value="{{END_DATE}}"></div>
 <button class="btn" id="refreshBtn" onclick="loadData()">🔄 刷新数据</button>
 </div>
 <div class="last-update" id="lastUpdate"></div>
@@ -193,7 +193,10 @@ window.addEventListener('DOMContentLoaded', function() {
 
 @app.route('/')
 def index():
-    return HTML_PAGE
+    today = datetime.now().date()
+    start_of_month = today.replace(day=1).strftime('%Y-%m-%d')
+    end_date = today.strftime('%Y-%m-%d')
+    return HTML_PAGE.replace('{{START_DATE}}', start_of_month).replace('{{END_DATE}}', end_date)
 
 @app.route('/health')
 def health():
