@@ -70,7 +70,7 @@ tr:hover{background:#f8fafc}
 <div class="date-input"><label>开始日期：</label><input type="date" id="startDate" value="{{START_DATE}}"></div>
 <div class="date-input"><label>结束日期：</label><input type="date" id="endDate" value="{{END_DATE}}"></div>
 <button class="btn" id="refreshBtn" onclick="loadData()">🔄 刷新数据</button>
-<button class="btn" id="syncBtn" onclick="syncLocalData()" style="background:#10b981">📱 同步本地数据</button>
+<span id="dataSource" style="font-size:0.85rem;color:#64748b"></span>
 </div>
 <div class="last-update" id="lastUpdate"></div>
 </div>
@@ -94,70 +94,16 @@ function fmt(n) {
     return (n || 0).toLocaleString();
 }
 
-async function syncLocalData() {
-    const s = document.getElementById('startDate').value;
-    const e = document.getElementById('endDate').value;
-    if (!s || !e) {
-        alert('请先选择日期范围');
-        return;
-    }
+function renderData(d, source) {
+    document.getElementById('totalTokens').textContent = fmt(d.summary.total);
+    document.getElementById('cacheRate').textContent = (d.summary.cacheRate || 0) + '%';
+    document.getElementById('activeWeeks').textContent = d.summary.activeWeeks || 0;
+    document.getElementById('dailyAvg').textContent = fmt(d.summary.dailyAvg);
+    document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString() + ' (' + source + ')';
     
-    const btn = document.getElementById('syncBtn');
-    const originalText = btn.textContent;
-    
-    async function doSync() {
-        btn.disabled = true;
-        btn.textContent = '⏳ 同步中...';
-        
-        try {
-            const url = 'http://localhost:8081/api/stats?start=' + s + '&end=' + e;
-            const r = await fetch(url);
-            if (!r.ok) throw new Error('SERVICE_NOT_RUNNING');
-            const d = await r.json();
-            
-            document.getElementById('totalTokens').textContent = fmt(d.summary.total);
-            document.getElementById('cacheRate').textContent = (d.summary.cacheRate || 0) + '%';
-            document.getElementById('activeWeeks').textContent = d.summary.activeWeeks || 0;
-            document.getElementById('dailyAvg').textContent = fmt(d.summary.dailyAvg);
-            document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString() + ' (本地真实数据)';
-            
-            updateChart(d.weeks || []);
-            updateTable(d.weeks || [], d.summary);
-            generateAnalysis(d);
-        } catch (err) {
-            if (err.message === 'SERVICE_NOT_RUNNING') {
-                throw err;
-            } else {
-                document.getElementById('tableContainer').innerHTML = '<div class="error">⚠️ 同步失败: ' + err.message + '</div>';
-            }
-        } finally {
-            btn.disabled = false;
-            btn.textContent = originalText;
-        }
-    }
-    
-    try {
-        await doSync();
-    } catch (err) {
-        if (err.message === 'SERVICE_NOT_RUNNING') {
-            btn.disabled = false;
-            btn.textContent = originalText;
-            
-            // 打开终端并显示命令
-            const cmd = 'cd /Users/tianhuali/WorkBuddy/2026-05-19-task-3 && python3 local_data_server.py';
-            const msg = encodeURIComponent('请在终端中运行以下命令，然后再次点击「同步本地数据」：\n\n' + cmd);
-            
-            // 打开终端并执行命令
-            window.open('x-terminal-emulator:' + cmd, '_blank');
-            
-            // 同时显示提示
-            const hint = document.createElement('div');
-            hint.className = 'tips';
-            hint.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1000;max-width:500px;background:white;padding:30px;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,0.3)';
-            hint.innerHTML = '<h4 style="color:#10b981;margin-bottom:16px">📱 启动本地数据服务</h4><p style="margin-bottom:16px;color:#374151">请在打开的终端窗口中运行以下命令：</p><code style="display:block;background:#f3f4f6;padding:16px;border-radius:8px;font-family:monospace;margin-bottom:20px">' + cmd + '</code><button onclick="this.parentElement.remove()" style="padding:10px 24px;background:#10b981;color:white;border:none;border-radius:8px;cursor:pointer">好的，我已启动</button>';
-            document.body.appendChild(hint);
-        }
-    }
+    updateChart(d.weeks || []);
+    updateTable(d.weeks || [], d.summary);
+    generateAnalysis(d);
 }
 
 async function loadData() {
@@ -171,25 +117,37 @@ async function loadData() {
     btn.disabled = true;
     btn.textContent = '⏳ 加载中...';
     
+    // 先尝试获取本地数据
     try {
-        const url = window.location.origin + '/api/stats?start=' + s + '&end=' + e;
-        const r = await fetch(url);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const d = await r.json();
-        
-        document.getElementById('totalTokens').textContent = fmt(d.summary.total);
-        document.getElementById('cacheRate').textContent = (d.summary.cacheRate || 0) + '%';
-        document.getElementById('activeWeeks').textContent = d.summary.activeWeeks || 0;
-        document.getElementById('dailyAvg').textContent = fmt(d.summary.dailyAvg);
-        document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString();
-        
-        updateChart(d.weeks || []);
-        updateTable(d.weeks || [], d.summary);
-        generateAnalysis(d);
-    } catch (err) {
-        console.error('Error:', err);
-        document.getElementById('tableContainer').innerHTML = '<div class="error">⚠️ 数据加载失败<br><small>' + err.message + '</small></div>';
-        document.getElementById('analysisContent').innerHTML = '<div class="error">加载失败</div>';
+        const url = 'http://localhost:8081/api/stats?start=' + s + '&end=' + e;
+        const r = await fetch(url, { timeout: 3000 });
+        if (r.ok) {
+            const d = await r.json();
+            renderData(d, '本地真实数据');
+            document.getElementById('dataSource').textContent = '✅ 已连接本地数据';
+            document.getElementById('dataSource').style.color = '#10b981';
+        } else {
+            throw new Error('not ok');
+        }
+    } catch {
+        // 本地服务不可用，尝试云端
+        try {
+            const url = window.location.origin + '/api/stats?start=' + s + '&end=' + e;
+            const r = await fetch(url);
+            if (r.ok) {
+                const d = await r.json();
+                renderData(d, '云端数据');
+                document.getElementById('dataSource').textContent = '⚠️ 本地服务未启动';
+                document.getElementById('dataSource').style.color = '#f59e0b';
+            } else {
+                throw new Error('云端服务异常');
+            }
+        } catch (err) {
+            console.error('Error:', err);
+            document.getElementById('tableContainer').innerHTML = '<div class="error">⚠️ 数据加载失败: ' + err.message + '</div>';
+            document.getElementById('dataSource').textContent = '❌ 数据加载失败';
+            document.getElementById('dataSource').style.color = '#ef4444';
+        }
     } finally {
         btn.disabled = false;
         btn.textContent = '🔄 刷新数据';
