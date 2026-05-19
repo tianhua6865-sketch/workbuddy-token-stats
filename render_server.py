@@ -58,11 +58,15 @@ tr:hover{background:#f8fafc}
 .loading{text-align:center;padding:40px;color:#64748b}
 .error{background:#fee2e2;color:#991b1b;padding:20px;border-radius:12px;text-align:center}
 .last-update{text-align:right;font-size:0.8rem;color:#64748b;margin-top:8px}
+.status-indicator{display:inline-flex;align-items:center;gap:6px;font-size:0.9rem}
+.status-dot{width:8px;height:8px;border-radius:50%;background:#10b981;animation:pulse 2s infinite}
+.status-dot.offline{background:#ef4444;animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
 </style>
 </head>
 <body>
 <div class="container">
-<header><h1>📊 WorkBuddy Token 使用量统计</h1><p>分析 Litianhua 的 AI 使用情况，优化成本支出</p></header>
+<header><h1>📊 WorkBuddy Token 使用量统计</h1><span class="status-indicator"><span class="status-dot" id="statusDot"></span><span id="statusText">检测中...</span></span></header>
 
 <div class="card">
 <div class="card-title">📂 数据源</div>
@@ -104,6 +108,18 @@ let uploadedData = null; // 保存上传的文件数据
 
 function fmt(n) {
     return (n || 0).toLocaleString();
+}
+
+function setStatus(online) {
+    const dot = document.getElementById('statusDot');
+    const text = document.getElementById('statusText');
+    if (online) {
+        dot.classList.remove('offline');
+        text.textContent = '本地服务在线';
+    } else {
+        dot.classList.add('offline');
+        text.textContent = '本地服务离线';
+    }
 }
 
 function showUploadHint() {
@@ -250,11 +266,15 @@ async function loadData() {
             const d = await r.json();
             renderData(d, '本地真实数据');
             document.getElementById('uploadArea').style.display = 'none';
+            setStatus(true);
             btn.disabled = false;
             btn.textContent = '🔄 刷新数据';
             return;
         }
     } catch {}
+
+    // 本地服务离线
+    setStatus(false);
     
     // 本地服务离线，直接显示上传区域
     document.getElementById('uploadArea').style.display = 'block';
@@ -262,12 +282,6 @@ async function loadData() {
     document.getElementById('analysisContent').innerHTML = '<div class="tips"><p>上传文件后即可查看统计</p></div>';
     btn.disabled = false;
     btn.textContent = '🔄 刷新数据';
-}
-        }
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '🔄 刷新数据';
-    }
 }
 
 function updateChart(weeks) {
