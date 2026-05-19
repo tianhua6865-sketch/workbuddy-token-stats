@@ -55,10 +55,16 @@ tr:hover{background:#f8fafc}
 .tips h4{color:#92400e;margin-bottom:12px}
 .tips ul{list-style:none}
 .tips li{padding:6px 0;padding-left:24px;position:relative;color:#78350f;font-size:0.9rem}
-.tips li::before{content:'';position:absolute;left:0;font-size:0.9rem}
 .loading{text-align:center;padding:40px;color:#64748b}
 .last-update{text-align:right;font-size:0.8rem;color:#64748b;margin-top:8px}
 .hidden{display:none}
+/* 进度条样式 */
+#progressBar{display:none;margin-top:16px}
+#progressBar .bar-bg{background:#e2e8f0;border-radius:8px;height:24px;overflow:hidden;position:relative}
+#progressBar .bar-fill{background:linear-gradient(90deg,#6366f1,#818cf8);height:100%;width:0%;transition:width 0.1s;border-radius:8px}
+#progressBar .bar-text{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:0.85rem;font-weight:600;color:#1e293b;white-space:nowrap}
+#progressBar .bar-info{margin-top:8px;font-size:0.85rem;color:#64748b;text-align:center}
+#dateFilterCard{margin-top:16px;padding:16px;background:#f0fdf4;border-radius:12px;border:1px solid #bbf7d0}
 </style>
 </head>
 <body>
@@ -72,15 +78,24 @@ tr:hover{background:#f8fafc}
 <p class="hint">请选择 ~/.workbuddy/traces/ 文件夹</p>
 </div>
 <input type="file" id="fileInput" webkitdirectory multiple style="display:none" onchange="handleFolderSelect(this.files)">
-<div style="margin-top:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-<div class="date-input">
-<label>开始日期：</label><input type="date" id="startDate">
-</div>
-<div class="date-input">
-<label>结束日期：</label><input type="date" id="endDate">
-</div>
-</div>
 <div id="fileInfo" style="margin-top:16px;font-size:0.9rem;color:#64748b"></div>
+<div id="progressBar">
+<div class="bar-bg"><div class="bar-fill" id="progressFill"></div><div class="bar-text" id="progressText">0%</div></div>
+<div class="bar-info" id="progressInfo"></div>
+</div>
+</div>
+
+<!-- 日期筛选器独立显示 -->
+<div class="card hidden" id="dateFilterCard">
+<div class="card-title">日期筛选</div>
+<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+<div class="date-input">
+<label>开始日期：</label><input type="date" id="startDate" onchange="applyDateRange()">
+</div>
+<div class="date-input">
+<label>结束日期：</label><input type="date" id="endDate" onchange="applyDateRange()">
+</div>
+</div>
 </div>
 
 <div id="dataCard" class="card hidden">
@@ -108,19 +123,17 @@ tr:hover{background:#f8fafc}
 <div class="card-title">分析结果与优化建议</div>
 <div id="analysisContent"></div>
 </div>
-
-<div class="card hidden" id="changeFolder">
-<button class="btn" onclick="resetPage()">选择其他文件夹</button>
 </div>
 </div>
 
 <script>
 let chart = null;
 let currentData = null;
+let allParsedData = []; // 存储所有解析后的数据
+let globalMinDate = null;
+let globalMaxDate = null;
 
 const today = new Date();
-const first = new Date(today.getFullYear(), today.getMonth(), 1);
-document.getElementById('startDate').value = first.toISOString().split('T')[0];
 document.getElementById('endDate').value = today.toISOString().split('T')[0];
 
 const dropZone = document.getElementById('dropZone');
@@ -130,65 +143,219 @@ dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.
 
 function fmt(n) { return (n || 0).toLocaleString(); }
 
-let totalInput = 0, totalOutput = 0, totalCached = 0;
-const weekData = {};
+function getWeek(d) { const dn=d.getUTCDay()||7;const y=new Date(Date.UTC(d.getUTCFullYear(),0,1));return Math.ceil((((d-y)/86400000+1))/7); }
+function fmtMD(d) { return (d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0'); }
+
+// 获取这一天的"周键"（周一开始）
+function getWeekKey(traceDate) {
+    const day = traceDate.getDay();
+    const monday = new Date(traceDate);
+    if (day === 0) {
+        monday.setDate(traceDate.getDate() - 6);
+    } else {
+        monday.setDate(traceDate.getDate() - (day - 1));
+    }
+    return monday.toISOString().split('T')[0];
+}
 
 function handleFolderSelect(files) {
     if (!files || files.length === 0) return;
-    document.getElementById('fileInfo').textContent = '已选择 ' + files.length + ' 个文件，正在解析...';
 
-    totalInput = 0; totalOutput = 0; totalCached = 0;
-    for (const key in weekData) delete weekData[key];
+    allParsedData = [];
+    globalMinDate = null;
+    globalMaxDate = null;
 
-    let processed = 0;
-    for (const file of files) {
-        if (!file.name.endsWith('.json')) { processed++; if (processed === files.length) finishParsing(); continue; }
-        const reader = new FileReader();
-        reader.onload = e => {
-            try {
-                const data = JSON.parse(e.target.result);
-                const trace = data.trace || {};
-                const startedAt = trace.startedAt;
-                if (startedAt) {
-                    const traceDate = new Date(startedAt);
-                    const startDate = new Date(document.getElementById('startDate').value);
-                    const endDate = new Date(document.getElementById('endDate').value);
-                    if (traceDate >= startDate && traceDate <= endDate) {
-                        const m = trace.modelInfo || {};
-                        const inp = m.totalInputTokens || 0;
-                        const out = m.totalOutputTokens || 0;
-                        const cached = m.totalCachedTokens || 0;
-                        totalInput += inp; totalOutput += out; totalCached += cached;
-
-                        const day = traceDate.getDay();
-                        const monday = new Date(traceDate);
-                        monday.setDate(traceDate.getDate() - (day === 0 ? 6 : day - 1));
-                        const sunday = new Date(monday);
-                        sunday.setDate(monday.getDate() + 6);
-                        const wk = monday.toISOString().split('T')[0];
-                        if (!weekData[wk]) weekData[wk] = {week: monday.getFullYear()+'-W'+getWeek(monday), dateRange: fmtMD(monday)+' ~ '+fmtMD(sunday), input:0,output:0,cached:0,total:0};
-                        weekData[wk].input += inp; weekData[wk].output += out; weekData[wk].cached += cached; weekData[wk].total += inp+out;
-                    }
-                }
-            } catch(err) {}
-            if (++processed === files.length) finishParsing();
-        };
-        reader.readAsText(file);
+    const jsonFiles = [];
+    for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (f.name.endsWith('.json')) {
+            jsonFiles.push(f);
+        }
     }
+
+    if (jsonFiles.length === 0) {
+        document.getElementById('fileInfo').textContent = '未找到 JSON 文件';
+        return;
+    }
+
+    document.getElementById('fileInfo').textContent = '已选择 ' + jsonFiles.length + ' 个文件，正在解析...';
+    document.getElementById('progressBar').style.display = 'block';
+    document.getElementById('progressFill').style.width = '0%';
+    document.getElementById('progressText').textContent = '0%';
+    document.getElementById('progressInfo').textContent = '准备解析...';
+    document.getElementById('dateFilterCard').classList.add('hidden');
+
+    const BATCH_SIZE = 16;
+    let currentBatch = 0;
+    let completed = 0;
+    const total = jsonFiles.length;
+
+    function updateProgress() {
+        const pct = Math.round(completed / total * 100);
+        document.getElementById('progressFill').style.width = pct + '%';
+        document.getElementById('progressText').textContent = pct + '%';
+        document.getElementById('progressInfo').textContent = '已解析: ' + completed + '/' + total;
+    }
+
+    function processNextBatch() {
+        const batch = jsonFiles.slice(currentBatch * BATCH_SIZE, (currentBatch + 1) * BATCH_SIZE);
+        if (batch.length === 0) {
+            finishParsing();
+            return;
+        }
+
+        const promises = batch.map(file => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        const trace = data.trace || {};
+                        const startedAt = trace.startedAt;
+
+                        if (startedAt) {
+                            const traceDate = new Date(startedAt);
+                            const m = trace.modelInfo || {};
+                            const inp = m.totalInputTokens || 0;
+                            const out = m.totalOutputTokens || 0;
+                            const cached = m.totalCachedTokens || 0;
+
+                            // 更新全局日期范围
+                            if (!globalMinDate || traceDate < globalMinDate) {
+                                globalMinDate = traceDate;
+                            }
+                            if (!globalMaxDate || traceDate > globalMaxDate) {
+                                globalMaxDate = traceDate;
+                            }
+
+                            // 存储所有数据
+                            allParsedData.push({
+                                fileName: file.name,
+                                date: traceDate,
+                                input: inp,
+                                output: out,
+                                cached: cached,
+                                total: inp + out
+                            });
+                        }
+                    } catch(err) {}
+                    completed++;
+                    updateProgress();
+                    resolve();
+                };
+                reader.onerror = function() {
+                    completed++;
+                    updateProgress();
+                    resolve();
+                };
+                reader.readAsText(file);
+            });
+        });
+
+        Promise.all(promises).then(() => {
+            currentBatch++;
+            processNextBatch();
+        });
+    }
+
+    processNextBatch();
 }
 
 function finishParsing() {
-    const start = document.getElementById('startDate').value;
-    const end = document.getElementById('endDate').value;
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-    const weeks = Object.values(weekData).sort((a,b)=>a.week.localeCompare(b.week));
+    document.getElementById('progressBar').style.display = 'none';
+
+    if (allParsedData.length === 0) {
+        document.getElementById('fileInfo').textContent = '未找到有效数据';
+        return;
+    }
+
+    // 按日期排序
+    allParsedData.sort((a, b) => a.date - b.date);
+
+    const minDateStr = globalMinDate.toISOString().split('T')[0];
+    const maxDateStr = globalMaxDate.toISOString().split('T')[0];
+
+    document.getElementById('startDate').value = minDateStr;
+    document.getElementById('endDate').value = maxDateStr;
+    document.getElementById('fileInfo').textContent = '已解析 ' + allParsedData.length + ' 条记录 (' + minDateStr + ' ~ ' + maxDateStr + ')';
+    document.getElementById('dateFilterCard').classList.remove('hidden');
+
+    // 自动应用默认日期范围
+    applyDateRange();
+}
+
+function applyDateRange() {
+    const startDateStr = document.getElementById('startDate').value;
+    const endDateStr = document.getElementById('endDate').value;
+
+    if (!startDateStr || !endDateStr) {
+        alert('请选择开始和结束日期');
+        return;
+    }
+
+    const startDate = new Date(startDateStr);
+    const endDate = new Date(endDateStr + 'T23:59:59.999');
+
+    if (startDate > endDate) {
+        alert('开始日期不能晚于结束日期');
+        return;
+    }
+
+    // 过滤数据
+    const filteredData = allParsedData.filter(d => d.date >= startDate && d.date <= endDate);
+
+    if (filteredData.length === 0) {
+        alert('所选日期范围内没有数据');
+        return;
+    }
+
+    // 聚合周数据
+    const weekData = {};
+    let totalInput = 0, totalOutput = 0, totalCached = 0;
+
+    for (const d of filteredData) {
+        totalInput += d.input;
+        totalOutput += d.output;
+        totalCached += d.cached;
+
+        const wk = getWeekKey(d.date);
+        const monday = new Date(wk);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+
+        if (!weekData[wk]) {
+            weekData[wk] = {
+                week: monday.getFullYear()+'-W'+getWeek(monday),
+                dateRange: fmtMD(monday)+' ~ '+fmtMD(sunday),
+                input: 0, output: 0, cached: 0, total: 0
+            };
+        }
+        weekData[wk].input += d.input;
+        weekData[wk].output += d.output;
+        weekData[wk].cached += d.cached;
+        weekData[wk].total += d.input + d.output;
+    }
+
+    const weeks = Object.values(weekData).sort((a, b) => a.week.localeCompare(b.week));
     const total = totalInput + totalOutput;
     const days = Math.round((endDate - startDate) / 86400000) + 1;
 
-    currentData = {period: start+' ~ '+end, weeks, summary:{total,totalInput,totalOutput,totalCached,cacheRate:Math.round(totalCached/max(total,1)*100*10)/10,activeWeeks:weeks.length,dailyAvg:Math.round(total/max(days,1)),days}};
+    currentData = {
+        period: startDateStr + ' ~ ' + endDateStr,
+        weeks,
+        summary: {
+            total,
+            totalInput,
+            totalOutput,
+            totalCached,
+            cacheRate: Math.round(totalCached / Math.max(total, 1) * 100 * 10) / 10,
+            activeWeeks: weeks.length,
+            dailyAvg: Math.round(total / Math.max(days, 1)),
+            days,
+            recordCount: filteredData.length
+        }
+    };
 
-    document.getElementById('fileInfo').textContent = '已解析 ' + weeks.length + ' 周数据，共 ' + fmt(total) + ' Tokens';
     renderData();
 }
 
@@ -198,45 +365,74 @@ function renderData() {
     document.getElementById('cacheRate').textContent = (d.summary.cacheRate || 0) + '%';
     document.getElementById('activeWeeks').textContent = d.summary.activeWeeks || 0;
     document.getElementById('dailyAvg').textContent = fmt(d.summary.dailyAvg);
-    document.getElementById('lastUpdate').textContent = '数据区间: ' + d.period;
-    ['dataCard','chartCard','tableCard','analysisCard','changeFolder'].forEach(id => document.getElementById(id).classList.remove('hidden'));
+    document.getElementById('lastUpdate').textContent = '数据区间: ' + d.period + ' (' + d.summary.recordCount + ' 条记录)';
+    ['dataCard','chartCard','tableCard','analysisCard'].forEach(id => document.getElementById(id).classList.remove('hidden'));
+    document.getElementById('selectCard').style.display = 'none';
+    document.getElementById('dateFilterCard').classList.remove('hidden');
     updateChart(d.weeks);
     updateTable(d.weeks, d.summary);
     generateAnalysis(d);
 }
 
-function getWeek(d) { const dn=d.getUTCDay()||7;const y=new Date(Date.UTC(d.getUTCFullYear(),0,1));return Math.ceil((((d-y)/86400000+1))/7); }
-function fmtMD(d) { return (d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0'); }
-
 function updateChart(weeks) {
     const ctx = document.getElementById('trendChart').getContext('2d');
     if (chart) chart.destroy();
     if (!weeks || !weeks.length) { ctx.canvas.parentNode.innerHTML='<div class=loading>暂无数据</div>'; return; }
-    chart = new Chart(ctx, {type:'bar',data:{labels:weeks.map(w=>w.week+' ('+w.dateRange+')'),datasets:[{label:'输入',data:weeks.map(w=>w.input),backgroundColor:'rgba(99,102,241,0.8)'},{label:'输出',data:weeks.map(w=>w.output),backgroundColor:'rgba(16,185,129,0.8)'},{label:'缓存',data:weeks.map(w=>w.cached),backgroundColor:'rgba(245,158,11,0.6)'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}}}});
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: weeks.map(w => w.week + ' (' + w.dateRange + ')'),
+            datasets: [
+                {label: '输入', data: weeks.map(w => w.input), backgroundColor: 'rgba(99,102,241,0.8)'},
+                {label: '输出', data: weeks.map(w => w.output), backgroundColor: 'rgba(16,185,129,0.8)'},
+                {label: '缓存', data: weeks.map(w => w.cached), backgroundColor: 'rgba(245,158,11,0.6)'}
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'top' } },
+            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+        }
+    });
 }
 
 function updateTable(weeks, summary) {
-    if (!weeks || !weeks.length) { document.getElementById('tableContainer').innerHTML='<div class=loading>暂无数据</div>'; return; }
+    if (!weeks || !weeks.length) {
+        document.getElementById('tableContainer').innerHTML = '<div class=loading>暂无数据</div>';
+        return;
+    }
     let html = '<table><thead><tr><th>周次</th><th>日期</th><th>输入</th><th>输出</th><th>缓存</th><th>合计</th></tr></thead><tbody>';
-    for (const w of weeks) html += '<tr><td><span class=week-tag>'+w.week+'</span></td><td>'+w.dateRange+'</td><td class=num>'+fmt(w.input)+'</td><td class=num>'+fmt(w.output)+'</td><td class=num>'+fmt(w.cached)+'</td><td class=num>'+fmt(w.total)+'</td></tr>';
-    html += '<tr class=total-row><td colspan=2>合计</td><td class=num>'+fmt(summary.totalInput)+'</td><td class=num>'+fmt(summary.totalOutput)+'</td><td class=num>'+fmt(summary.totalCached)+'</td><td class=num>'+fmt(summary.total)+'</td></tr></tbody></table>';
+    for (const w of weeks) {
+        html += '<tr><td><span class=week-tag>' + w.week + '</span></td><td>' + w.dateRange + '</td><td class=num>' + fmt(w.input) + '</td><td class=num>' + fmt(w.output) + '</td><td class=num>' + fmt(w.cached) + '</td><td class=num>' + fmt(w.total) + '</td></tr>';
+    }
+    html += '<tr class=total-row><td colspan=2>合计</td><td class=num>' + fmt(summary.totalInput) + '</td><td class=num>' + fmt(summary.totalOutput) + '</td><td class=num>' + fmt(summary.totalCached) + '</td><td class=num>' + fmt(summary.total) + '</td></tr></tbody></table>';
     document.getElementById('tableContainer').innerHTML = html;
 }
 
 function generateAnalysis(d) {
     const weeks = d.weeks || [], summary = d.summary || {};
-    if (!weeks.length) { document.getElementById('analysisContent').innerHTML='<div class=loading>暂无数据</div>'; return; }
+    if (!weeks.length) { document.getElementById('analysisContent').innerHTML = '<div class=loading>暂无数据</div>'; return; }
     const avg = summary.total / weeks.length;
     let trend = '';
-    if (weeks.length > 1) { const c = ((weeks[weeks.length-1].total - weeks[0].total) / weeks[0].total * 100).toFixed(1); trend = c > 0 ? '较首周增加 '+c+'%' : '较首周减少 '+Math.abs(c)+'%'; }
-    document.getElementById('analysisContent').innerHTML = '<div class=tips><h4>使用分析</h4><ul><li>使用频率：在 '+(summary.days||0)+' 天内共有 '+weeks.length+' 周使用记录</li><li>周均使用：'+(avg/1000000).toFixed(1)+'M tokens</li><li>缓存效率：'+(summary.cacheRate||0)+'%</li><li>趋势：'+(trend||'数据不足')+'</li></ul><h4 style=margin-top:16px>优化建议</h4><ul><li>保持同一主题对话连贯性，提高缓存复用率</li><li>将相关任务放在一起处理</li><li>完成的主题及时开启新会话</li></ul></div>';
+    if (weeks.length > 1) {
+        const c = ((weeks[weeks.length-1].total - weeks[0].total) / weeks[0].total * 100).toFixed(1);
+        trend = c > 0 ? '较首周增加 ' + c + '%' : '较首周减少 ' + Math.abs(c) + '%';
+    }
+    document.getElementById('analysisContent').innerHTML =
+        '<div class=tips><h4>使用分析</h4><ul>' +
+        '<li>使用频率：在 ' + (summary.days || 0) + ' 天内共有 ' + weeks.length + ' 周使用记录</li>' +
+        '<li>周均使用：' + (avg / 1000000).toFixed(1) + 'M tokens</li>' +
+        '<li>缓存效率：' + (summary.cacheRate || 0) + '%</li>' +
+        '<li>趋势：' + (trend || '数据不足') + '</li></ul>' +
+        '<h4 style=margin-top:16px>优化建议</h4><ul>' +
+        '<li>保持同一主题对话连贯性，提高缓存复用率</li>' +
+        '<li>将相关任务放在一起处理</li>' +
+        '<li>完成的主题及时开启新会话</li></ul></div>';
 }
 
 function resetPage() {
-    ['dataCard','chartCard','tableCard','analysisCard','changeFolder'].forEach(id => document.getElementById(id).classList.add('hidden'));
-    document.getElementById('fileInfo').textContent = '';
-    document.getElementById('fileInput').value = '';
-    currentData = null;
+    location.reload();
 }
 </script>
 </body>

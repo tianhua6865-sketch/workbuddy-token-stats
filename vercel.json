@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "vercel_server.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "token-stats.html",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/stats",
+      "dest": "vercel_server.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "token-stats.html"
+    }
+  ]
+}

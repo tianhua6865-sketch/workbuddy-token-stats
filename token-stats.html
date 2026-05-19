@@ -370,14 +370,23 @@
     <script>
         let chart = null;
 
-        // 初始化日期为最近30天
+        // 初始化日期为当月第一天到今天（使用本地时间）
         function initDates() {
             const today = new Date();
-            const thirtyDaysAgo = new Date(today);
-            thirtyDaysAgo.setDate(today.getDate() - 30);
+            const year = today.getFullYear();
+            const month = today.getMonth();
+            const firstDayOfMonth = new Date(year, month, 1);
 
-            document.getElementById('endDate').value = today.toISOString().split('T')[0];
-            document.getElementById('startDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+            // 使用本地日期格式化
+            const formatDate = (d) => {
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            };
+
+            document.getElementById('endDate').value = formatDate(today);
+            document.getElementById('startDate').value = formatDate(firstDayOfMonth);
         }
 
         // 格式化数字
