@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WorkBuddy Token 使用量统计</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-light: #818cf8;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 2rem;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        header p {
+            color: var(--text-light);
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-title::before {
+            content: '';
+            width: 4px;
+            height: 20px;
+            background: var(--primary);
+            border-radius: 2px;
+        }
+
+        .date-picker {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .date-input {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .date-input label {
+            font-weight: 500;
+            color: var(--text-light);
+        }
+
+        .date-input input {
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .date-input input:focus {
+            border-color: var(--primary);
+        }
+
+        .btn {
+            padding: 10px 20px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--primary-light);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+        }
+
+        .stat-card.warning {
+            background: linear-gradient(135deg, var(--warning), #fbbf24);
+        }
+
+        .stat-card.success {
+            background: linear-gradient(135deg, var(--success), #34d399);
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            opacity: 0.9;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+
+        .stat-sub {
+            font-size: 0.75rem;
+            opacity: 0.8;
+            margin-top: 4px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--bg);
+            font-weight: 600;
+            color: var(--text-light);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+        }
+
+        tr:hover {
+            background: var(--bg);
+        }
+
+        .week-tag {
+            display: inline-block;
+            background: var(--primary);
+            color: white;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .model-tag {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .model-auto { background: #dbeafe; color: #1d4ed8; }
+        .model-auto-pro { background: #ede9fe; color: #7c3aed; }
+        .model-default { background: #d1fae5; color: #059669; }
+        .model-other { background: #fef3c7; color: #d97706; }
+
+        .total-row {
+            background: var(--bg);
+            font-weight: 600;
+        }
+
+        .num {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.9rem;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 20px 0;
+        }
+
+        .tips {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .tips h4 {
+            color: #92400e;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tips ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .tips li {
+            padding: 8px 0;
+            padding-left: 24px;
+            position: relative;
+            color: #78350f;
+        }
+
+        .tips li::before {
+            content: '💡';
+            position: absolute;
+            left: 0;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-light);
+        }
+
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-light);
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            table {
+                font-size: 0.875rem;
+            }
+            th, td {
+                padding: 8px 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 WorkBuddy Token 使用量统计</h1>
+            <p>分析您的 AI 使用情况，优化成本支出</p>
+        </header>
+
+        <!-- 时间选择器 -->
+        <div class="card">
+            <div class="card-title">日期范围选择</div>
+            <div class="date-picker">
+                <div class="date-input">
+                    <label>开始日期：</label>
+                    <input type="date" id="startDate" value="2026-04-19">
+                </div>
+                <div class="date-input">
+                    <label>结束日期：</label>
+                    <input type="date" id="endDate" value="2026-05-19">
+                </div>
+                <button class="btn" onclick="refreshStats()">🔄 更新统计</button>
+            </div>
+        </div>
+
+        <!-- 总体统计 -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">总使用量</div>
+                <div class="stat-value" id="totalTokens">4,600,507</div>
+                <div class="stat-sub">Tokens</div>
+            </div>
+            <div class="stat-card success">
+                <div class="stat-label">缓存复用率</div>
+                <div class="stat-value" id="cacheRate">90.6%</div>
+                <div class="stat-sub">节省成本</div>
+            </div>
+            <div class="stat-card warning">
+                <div class="stat-label">活跃周数</div>
+                <div class="stat-value" id="activeWeeks">2</div>
+                <div class="stat-sub">周</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">日均使用</div>
+                <div class="stat-value" id="dailyAvg">153,350</div>
+                <div class="stat-sub">Tokens/天</div>
+            </div>
+        </div>
+
+        <!-- 趋势图表 -->
+        <div class="card">
+            <div class="card-title">📈 每周使用量趋势</div>
+            <div class="chart-container">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+
+        <!-- 详细数据表 -->
+        <div class="card">
+            <div class="card-title">📋 详细统计表</div>
+            <div id="tableContainer">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>周次</th>
+                            <th>日期范围</th>
+                            <th>模型</th>
+                            <th>输入</th>
+                            <th>输出</th>
+                            <th>缓存</th>
+                            <th>合计</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statsTable">
+                        <tr>
+                            <td><span class="week-tag">2026-W18</span></td>
+                            <td>05-04 ~ 05-10</td>
+                            <td><span class="model-tag model-auto">auto</span> + <span class="model-tag model-auto-pro">auto-pro</span></td>
+                            <td class="num">3,440,191</td>
+                            <td class="num">38,935</td>
+                            <td class="num">3,165,926</td>
+                            <td class="num">3,479,126</td>
+                        </tr>
+                        <tr>
+                            <td><span class="week-tag">2026-W20</span></td>
+                            <td>05-18 ~ 05-24</td>
+                            <td><span class="model-tag model-auto-pro">auto-pro</span></td>
+                            <td class="num">1,118,621</td>
+                            <td class="num">2,760</td>
+                            <td class="num">1,003,461</td>
+                            <td class="num">1,121,381</td>
+                        </tr>
+                        <tr class="total-row">
+                            <td colspan="3">合计</td>
+                            <td class="num">4,558,812</td>
+                            <td class="num">41,695</td>
+                            <td class="num">4,169,387</td>
+                            <td class="num">4,600,507</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 分析与建议 -->
+        <div class="card">
+            <div class="card-title">💡 分析结果与优化建议</div>
+            <div class="tips">
+                <h4>📊 使用分析</h4>
+                <ul>
+                    <li><strong>使用频率：</strong>在过去30天内，有数据记录的仅2周，说明您的使用相对集中，可能是有特定项目时集中使用。</li>
+                    <li><strong>模型偏好：</strong>主要使用 auto-pro 模型（占比 99.4%），auto 模型使用量较少。</li>
+                    <li><strong>缓存效率：</strong>整体缓存复用率达到 90.6%，这是一个非常优秀的水平，说明上下文复用做得很好。</li>
+                </ul>
+
+                <h4 style="margin-top: 20px;">🎯 优化建议</h4>
+                <ul>
+                    <li><strong>考虑使用更轻量的模型：</strong>对于简单查询，可以使用 auto 模型节省成本，auto-pro 模型主要用于复杂任务。</li>
+                    <li><strong>保持上下文连贯：</strong>您的缓存复用率已经很高，继续保持同一主题对话的连贯性。</li>
+                    <li><strong>批量处理任务：</strong>将多个相关任务放在一起处理，可以进一步提高缓存复用率。</li>
+                    <li><strong>定期清理会话：</strong>对于已完成的主题，及时开启新会话，避免无效的上下文累积。</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 数据
+        const weeklyData = {
+            '2026-W18': { input: 3440191, output: 38935, cached: 3165926, total: 3479126 },
+            '2026-W20': { input: 1118621, output: 2760, cached: 1003461, total: 1121381 }
+        };
+
+        const weekLabels = ['2026-W18\n(05-04~05-10)', '2026-W20\n(05-18~05-24)'];
+        const totalData = [3479126, 1121381];
+        const inputData = [3440191, 1118621];
+        const outputData = [38935, 2760];
+        const cachedData = [3165926, 1003461];
+
+        // 绘制图表
+        function drawChart() {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['2026-W18\n(05-04~05-10)', '2026-W20\n(05-18~05-24)'],
+                    datasets: [
+                        {
+                            label: '输入 Tokens',
+                            data: inputData,
+                            backgroundColor: 'rgba(99, 102, 241, 0.8)',
+                            borderRadius: 4
+                        },
+                        {
+                            label: '输出 Tokens',
+                            data: outputData,
+                            backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                            borderRadius: 4
+                        },
+                        {
+                            label: '缓存 Tokens',
+                            data: cachedData,
+                            backgroundColor: 'rgba(245, 158, 11, 0.6)',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.raw.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            grid: {
+                                color: '#e2e8f0'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    if (value >= 1000000) return (value/1000000).toFixed(1) + 'M';
+                                    if (value >= 1000) return (value/1000).toFixed(0) + 'K';
+                                    return value;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 页面加载时绘制图表
+        drawChart();
+
+        // 更新统计
+        function refreshStats() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            alert('正在重新加载数据...\n时间范围: ' + startDate + ' 至 ' + endDate + '\n\n请刷新页面以查看最新数据');
+        }
+    </script>
+</body>
+</html>
