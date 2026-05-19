@@ -1,19 +1,14 @@
 #!/bin/bash
-# WorkBuddy Token Stats 启动脚本
+# Render 部署启动脚本
 
-echo "=========================================="
-echo "  🚀 WorkBuddy Token 使用量统计"
-echo "=========================================="
-echo ""
-echo "启动服务器后访问: http://localhost:8080"
-echo ""
-echo "功能说明:"
-echo "  - 自动读取 ~/.workbuddy/traces/ 获取最新数据"
-echo "  - 支持自定义日期范围"
-echo "  - 实时更新，点击按钮刷新即可获取最新数据"
-echo ""
-echo "按 Ctrl+C 停止服务器"
-echo "=========================================="
+# 使用 PORT 环境变量（Render 会自动设置）
+PORT=${PORT:-8080}
 
-cd "$(dirname "$0")"
-python3 server.py
+echo "=================================="
+echo "  WorkBuddy Token Stats"
+echo "=================================="
+echo "  Port: $PORT"
+echo "  Mode: Production"
+echo "=================================="
+
+python render_server.py

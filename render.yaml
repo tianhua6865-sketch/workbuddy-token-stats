@@ -1,0 +1,9 @@
+{
+  "$schema": "https://render.com/schema/v2/render-web.yaml",
+  "name": "workbuddy-token-stats",
+  "runtime": "python313",
+  "region": "singapore",
+  "startCommand": "./start.sh",
+  "buildCommand": "pip install -r requirements.txt",
+  "envVars": []
+}
