@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""WorkBuddy Token Stats - 稳定版"""
+"""WorkBuddy Token Stats - 真实数据版"""
 
 from flask import Flask, jsonify, request
 import os
+import json
 from datetime import datetime, timedelta
+from pathlib import Path
 
 app = Flask(__name__)
+
+TRACES_DIR = Path.home() / '.workbuddy' / 'traces'
 
 HTML_PAGE = '''<!DOCTYPE html>
 <html lang="zh-CN">
@@ -205,31 +209,57 @@ def health():
 @app.route('/api/stats')
 def stats():
     try:
-        start_str = request.args.get('start', '2026-04-19')
+        start_str = request.args.get('start', datetime.now().strftime('%Y-%m-01'))
         end_str = request.args.get('end', datetime.now().strftime('%Y-%m-%d'))
         
         start = datetime.strptime(start_str, '%Y-%m-%d').date()
         end = datetime.strptime(end_str, '%Y-%m-%d').date()
         
-        weeks = []
-        today = datetime.now().date()
-        for i in range(6):
-            week_date = today - timedelta(weeks=i)
-            monday = week_date - timedelta(days=week_date.weekday())
-            sunday = monday + timedelta(days=6)
-            
-            if start <= sunday and end >= monday:
-                weeks.append({
-                    'week': monday.strftime('%Y-W%W'),
-                    'dateRange': f"{monday.strftime('%m-%d')} ~ {sunday.strftime('%m-%d')}",
-                    'input': 500000 + (5-i) * 120000,
-                    'output': 200000 + (5-i) * 60000,
-                    'cached': int((500000 + (5-i) * 120000) * 0.30),
-                    'total': 700000 + (5-i) * 180000
-                })
+        # 读取真实 traces 数据
+        week_data = {}
+        trace_count = 0
         
-        # 按时间顺序排序（最早在前）
-        weeks.sort(key=lambda w: w['week'])
+        if TRACES_DIR.exists():
+            for session_dir in TRACES_DIR.iterdir():
+                if session_dir.is_dir():
+                    for trace_file in session_dir.glob('trace_*.json'):
+                        try:
+                            with open(trace_file, 'r') as f:
+                                data = json.load(f)
+                            trace = data.get('trace', {})
+                            started_at = trace.get('startedAt', '')
+                            if started_at:
+                                trace_date = datetime.fromisoformat(started_at.replace('Z', '+00:00')).date()
+                                if start <= trace_date <= end:
+                                    trace_count += 1
+                                    # 计算所在周
+                                    monday = trace_date - timedelta(days=trace_date.weekday())
+                                    sunday = monday + timedelta(days=6)
+                                    week_key = monday.strftime('%Y-W%W')
+                                    
+                                    if week_key not in week_data:
+                                        week_data[week_key] = {
+                                            'week': week_key,
+                                            'dateRange': f"{monday.strftime('%m-%d')} ~ {sunday.strftime('%m-%d')}",
+                                            'input': 0,
+                                            'output': 0,
+                                            'cached': 0,
+                                            'total': 0
+                                        }
+                                    
+                                    model_info = trace.get('modelInfo', {})
+                                    input_tok = model_info.get('totalInputTokens', 0) or 0
+                                    output_tok = model_info.get('totalOutputTokens', 0) or 0
+                                    cached_tok = model_info.get('totalCachedTokens', 0) or 0
+                                    
+                                    week_data[week_key]['input'] += input_tok
+                                    week_data[week_key]['output'] += output_tok
+                                    week_data[week_key]['cached'] += cached_tok
+                                    week_data[week_key]['total'] += input_tok + output_tok
+                        except Exception:
+                            continue
+        
+        weeks = sorted(week_data.values(), key=lambda w: w['week'])
         
         total = sum(w['total'] for w in weeks)
         total_input = sum(w['input'] for w in weeks)
@@ -248,7 +278,8 @@ def stats():
                 'cacheRate': round(cache_rate, 1),
                 'activeWeeks': len(weeks),
                 'dailyAvg': total // max((end - start).days + 1, 1),
-                'days': (end - start).days + 1
+                'days': (end - start).days + 1,
+                'traceCount': trace_count
             }
         })
     except Exception as e:
