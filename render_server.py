@@ -70,6 +70,7 @@ tr:hover{background:#f8fafc}
 <div class="date-input"><label>开始日期：</label><input type="date" id="startDate" value="{{START_DATE}}"></div>
 <div class="date-input"><label>结束日期：</label><input type="date" id="endDate" value="{{END_DATE}}"></div>
 <button class="btn" id="refreshBtn" onclick="loadData()">🔄 刷新数据</button>
+<button class="btn" id="syncBtn" onclick="syncLocalData()" style="background:#10b981">📱 同步本地数据</button>
 </div>
 <div class="last-update" id="lastUpdate"></div>
 </div>
@@ -91,6 +92,42 @@ let chart = null;
 
 function fmt(n) {
     return (n || 0).toLocaleString();
+}
+
+async function syncLocalData() {
+    const s = document.getElementById('startDate').value;
+    const e = document.getElementById('endDate').value;
+    if (!s || !e) {
+        alert('请先选择日期范围');
+        return;
+    }
+    
+    const btn = document.getElementById('syncBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ 同步中...';
+    
+    try {
+        const url = 'http://localhost:8081/api/stats?start=' + s + '&end=' + e;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        
+        document.getElementById('totalTokens').textContent = fmt(d.summary.total);
+        document.getElementById('cacheRate').textContent = (d.summary.cacheRate || 0) + '%';
+        document.getElementById('activeWeeks').textContent = d.summary.activeWeeks || 0;
+        document.getElementById('dailyAvg').textContent = fmt(d.summary.dailyAvg);
+        document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString() + ' (本地真实数据)';
+        
+        updateChart(d.weeks || []);
+        updateTable(d.weeks || [], d.summary);
+        generateAnalysis(d);
+    } catch (err) {
+        console.error('Error:', err);
+        document.getElementById('tableContainer').innerHTML = '<div class="error">⚠️ 本地服务未启动<br><small>请先在终端运行: <code>python3 local_data_server.py</code></small></div>';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '📱 同步本地数据';
+    }
 }
 
 async function loadData() {
