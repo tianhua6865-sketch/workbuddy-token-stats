@@ -124,6 +124,11 @@
             background: var(--primary-light);
         }
 
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -196,19 +201,6 @@
             font-weight: 500;
         }
 
-        .model-tag {
-            display: inline-block;
-            padding: 2px 10px;
-            border-radius: 12px;
-            font-size: 0.875rem;
-            font-weight: 500;
-        }
-
-        .model-auto { background: #dbeafe; color: #1d4ed8; }
-        .model-auto-pro { background: #ede9fe; color: #7c3aed; }
-        .model-default { background: #d1fae5; color: #059669; }
-        .model-other { background: #fef3c7; color: #d97706; }
-
         .total-row {
             background: var(--bg);
             font-weight: 600;
@@ -263,10 +255,30 @@
             color: var(--text-light);
         }
 
-        .empty {
+        .loading::after {
+            content: '';
+            animation: dots 1.5s infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 20px;
+            border-radius: 12px;
             text-align: center;
-            padding: 40px;
+        }
+
+        .last-update {
+            text-align: right;
+            font-size: 0.8rem;
             color: var(--text-light);
+            margin-top: 8px;
         }
 
         @media (max-width: 768px) {
@@ -295,36 +307,37 @@
             <div class="date-picker">
                 <div class="date-input">
                     <label>开始日期：</label>
-                    <input type="date" id="startDate" value="2026-04-19">
+                    <input type="date" id="startDate">
                 </div>
                 <div class="date-input">
                     <label>结束日期：</label>
-                    <input type="date" id="endDate" value="2026-05-19">
+                    <input type="date" id="endDate">
                 </div>
-                <button class="btn" onclick="refreshStats()">🔄 更新统计</button>
+                <button class="btn" id="refreshBtn" onclick="loadData()">🔄 刷新数据</button>
             </div>
+            <div class="last-update" id="lastUpdate"></div>
         </div>
 
         <!-- 总体统计 -->
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-label">总使用量</div>
-                <div class="stat-value" id="totalTokens">5,349,071</div>
+                <div class="stat-value" id="totalTokens">--</div>
                 <div class="stat-sub">Tokens</div>
             </div>
             <div class="stat-card success">
                 <div class="stat-label">缓存复用率</div>
-                <div class="stat-value" id="cacheRate">90.0%</div>
+                <div class="stat-value" id="cacheRate">--</div>
                 <div class="stat-sub">节省成本</div>
             </div>
             <div class="stat-card warning">
                 <div class="stat-label">活跃周数</div>
-                <div class="stat-value" id="activeWeeks">2</div>
+                <div class="stat-value" id="activeWeeks">--</div>
                 <div class="stat-sub">周</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">日均使用</div>
-                <div class="stat-value" id="dailyAvg">178,302</div>
+                <div class="stat-value" id="dailyAvg">--</div>
                 <div class="stat-sub">Tokens/天</div>
             </div>
         </div>
@@ -341,90 +354,109 @@
         <div class="card">
             <div class="card-title">📋 详细统计表</div>
             <div id="tableContainer">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>周次</th>
-                            <th>日期范围</th>
-                            <th>模型</th>
-                            <th>输入</th>
-                            <th>输出</th>
-                            <th>缓存</th>
-                            <th>合计</th>
-                        </tr>
-                    </thead>
-                    <tbody id="statsTable">
-                        <tr>
-                            <td><span class="week-tag">2026-W18</span></td>
-                            <td>05-04 ~ 05-10</td>
-                            <td><span class="model-tag model-auto">auto</span> + <span class="model-tag model-auto-pro">auto-pro</span></td>
-                            <td class="num">3,440,191</td>
-                            <td class="num">38,935</td>
-                            <td class="num">3,165,926</td>
-                            <td class="num">3,479,126</td>
-                        </tr>
-                        <tr>
-                            <td><span class="week-tag">2026-W20</span></td>
-                            <td>05-18 ~ 05-24</td>
-                            <td><span class="model-tag model-auto">auto</span> + <span class="model-tag model-auto-pro">auto-pro</span></td>
-                            <td class="num">1,863,645</td>
-                            <td class="num">6,300</td>
-                            <td class="num">1,649,850</td>
-                            <td class="num">1,869,945</td>
-                        </tr>
-                        <tr class="total-row">
-                            <td colspan="3">合计</td>
-                            <td class="num">5,303,836</td>
-                            <td class="num">45,235</td>
-                            <td class="num">4,815,776</td>
-                            <td class="num">5,349,071</td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div class="loading">正在加载数据</div>
             </div>
         </div>
 
         <!-- 分析与建议 -->
-        <div class="card">
+        <div class="card" id="analysisCard">
             <div class="card-title">💡 分析结果与优化建议</div>
-            <div class="tips">
-                <h4>📊 使用分析</h4>
-                <ul>
-                    <li><strong>使用频率：</strong>在过去30天内，有数据记录的仅2周，说明您的使用相对集中，可能是有特定项目时集中使用。</li>
-                    <li><strong>模型偏好：</strong>主要使用 auto-pro 模型（占比 99.4%），auto 模型使用量较少。</li>
-                    <li><strong>缓存效率：</strong>整体缓存复用率达到 90.6%，这是一个非常优秀的水平，说明上下文复用做得很好。</li>
-                </ul>
-
-                <h4 style="margin-top: 20px;">🎯 优化建议</h4>
-                <ul>
-                    <li><strong>考虑使用更轻量的模型：</strong>对于简单查询，可以使用 auto 模型节省成本，auto-pro 模型主要用于复杂任务。</li>
-                    <li><strong>保持上下文连贯：</strong>您的缓存复用率已经很高，继续保持同一主题对话的连贯性。</li>
-                    <li><strong>批量处理任务：</strong>将多个相关任务放在一起处理，可以进一步提高缓存复用率。</li>
-                    <li><strong>定期清理会话：</strong>对于已完成的主题，及时开启新会话，避免无效的上下文累积。</li>
-                </ul>
+            <div class="tips" id="analysisContent">
+                <div class="loading">正在分析</div>
             </div>
         </div>
     </div>
 
     <script>
-        // 数据 - 2026-04-19 ~ 2026-05-19
-        const weeklyData = {
-            'W18': { input: 3440191, output: 38935, cached: 3165926, total: 3479126 },
-            'W20': { input: 1863645, output: 6300, cached: 1649850, total: 1869945 }
-        };
+        let chart = null;
 
-        const inputData = [3440191, 1863645];
-        const outputData = [38935, 6300];
-        const cachedData = [3165926, 1649850];
+        // 初始化日期为最近30天
+        function initDates() {
+            const today = new Date();
+            const thirtyDaysAgo = new Date(today);
+            thirtyDaysAgo.setDate(today.getDate() - 30);
 
-        // 绘制图表
-        function drawChart() {
+            document.getElementById('endDate').value = today.toISOString().split('T')[0];
+            document.getElementById('startDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+        }
+
+        // 格式化数字
+        function formatNumber(num) {
+            return num.toLocaleString();
+        }
+
+        // 加载数据
+        async function loadData() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            if (!startDate || !endDate) {
+                alert('请选择日期范围');
+                return;
+            }
+
+            const btn = document.getElementById('refreshBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ 加载中...';
+
+            document.getElementById('tableContainer').innerHTML = '<div class="loading">正在加载数据</div>';
+
+            try {
+                const response = await fetch(`/api/stats?start=${startDate}&end=${endDate}`);
+                
+                if (!response.ok) {
+                    throw new Error('数据加载失败');
+                }
+
+                const data = await response.json();
+
+                // 更新总体统计
+                document.getElementById('totalTokens').textContent = formatNumber(data.summary.total);
+                document.getElementById('cacheRate').textContent = data.summary.cacheRate + '%';
+                document.getElementById('activeWeeks').textContent = data.summary.activeWeeks;
+                document.getElementById('dailyAvg').textContent = formatNumber(data.summary.dailyAvg);
+                document.getElementById('lastUpdate').textContent = `最后更新: ${new Date().toLocaleTimeString()}`;
+
+                // 更新图表
+                updateChart(data.weeks);
+
+                // 更新表格
+                updateTable(data.weeks, data.summary);
+
+                // 生成分析
+                generateAnalysis(data);
+
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('tableContainer').innerHTML = `
+                    <div class="error">
+                        ⚠️ 数据加载失败<br>
+                        <small>请确保已启动服务器: python3 server.py</small>
+                    </div>
+                `;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔄 刷新数据';
+            }
+        }
+
+        // 更新图表
+        function updateChart(weeks) {
             const ctx = document.getElementById('trendChart').getContext('2d');
 
-            new Chart(ctx, {
+            const labels = weeks.map(w => `${w.week}\n(${w.dateRange})`);
+            const inputData = weeks.map(w => w.input);
+            const outputData = weeks.map(w => w.output);
+            const cachedData = weeks.map(w => w.cached);
+
+            if (chart) {
+                chart.destroy();
+            }
+
+            chart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: ['2026-W18\n(05-04~05-10)', '2026-W20\n(05-18~05-24)'],
+                    labels: labels,
                     datasets: [
                         {
                             label: '输入 Tokens',
@@ -491,15 +523,102 @@
             });
         }
 
-        // 页面加载时绘制图表
-        drawChart();
+        // 更新表格
+        function updateTable(weeks, summary) {
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>周次</th>
+                            <th>日期范围</th>
+                            <th>输入</th>
+                            <th>输出</th>
+                            <th>缓存</th>
+                            <th>合计</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
 
-        // 更新统计
-        function refreshStats() {
-            const startDate = document.getElementById('startDate').value;
-            const endDate = document.getElementById('endDate').value;
-            alert('正在重新加载数据...\n时间范围: ' + startDate + ' 至 ' + endDate + '\n\n请刷新页面以查看最新数据');
+            for (const week of weeks) {
+                html += `
+                    <tr>
+                        <td><span class="week-tag">${week.week}</span></td>
+                        <td>${week.dateRange}</td>
+                        <td class="num">${formatNumber(week.input)}</td>
+                        <td class="num">${formatNumber(week.output)}</td>
+                        <td class="num">${formatNumber(week.cached)}</td>
+                        <td class="num">${formatNumber(week.total)}</td>
+                    </tr>
+                `;
+            }
+
+            html += `
+                        <tr class="total-row">
+                            <td colspan="2">合计</td>
+                            <td class="num">${formatNumber(summary.totalInput)}</td>
+                            <td class="num">${formatNumber(summary.totalOutput)}</td>
+                            <td class="num">${formatNumber(summary.totalCached)}</td>
+                            <td class="num">${formatNumber(summary.total)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            `;
+
+            document.getElementById('tableContainer').innerHTML = html;
         }
+
+        // 生成分析
+        function generateAnalysis(data) {
+            const { weeks, summary } = data;
+            
+            let analysis = '';
+            
+            if (weeks.length === 0) {
+                analysis = '<p>暂无数据</p>';
+            } else {
+                const avgPerWeek = summary.total / weeks.length;
+                const lastWeek = weeks[weeks.length - 1];
+                const firstWeek = weeks[0];
+                
+                let trend = '';
+                if (weeks.length > 1) {
+                    const firstTotal = weeks[0].total;
+                    const lastTotal = lastWeek.total;
+                    const change = ((lastTotal - firstTotal) / firstTotal * 100).toFixed(1);
+                    if (change > 0) {
+                        trend = `较首周增加 ${change}%`;
+                    } else {
+                        trend = `较首周减少 ${Math.abs(change)}%`;
+                    }
+                }
+
+                analysis = `
+                    <h4>📊 使用分析</h4>
+                    <ul>
+                        <li><strong>使用频率：</strong>在 ${summary.days} 天内，共有 ${weeks.length} 周有使用记录。</li>
+                        <li><strong>周均使用：</strong>平均每周使用 ${(avgPerWeek / 1000000).toFixed(1)}M tokens。</li>
+                        <li><strong>缓存效率：</strong>整体缓存复用率达到 ${summary.cacheRate}%，表现优秀。</li>
+                        <li><strong>趋势：</strong>${trend || '数据不足，无法分析趋势'}</li>
+                    </ul>
+
+                    <h4 style="margin-top: 20px;">🎯 优化建议</h4>
+                    <ul>
+                        <li><strong>缓存利用：</strong>您的缓存复用率已达 ${summary.cacheRate}%，继续保持同一主题对话的连贯性。</li>
+                        <li><strong>任务合并：</strong>将相关任务放在一起处理，可进一步提高缓存复用率。</li>
+                        <li><strong>定期清理：</strong>完成的主题及时开启新会话，避免无效上下文累积。</li>
+                    </ul>
+                `;
+            }
+
+            document.getElementById('analysisContent').innerHTML = analysis;
+        }
+
+        // 页面加载时自动获取数据
+        window.onload = function() {
+            initDates();
+            loadData();
+        };
     </script>
 </body>
 </html>
