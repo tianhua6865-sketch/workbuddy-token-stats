@@ -157,7 +157,7 @@ def get_stats():
             'dailyAvg': total_all // days if days > 0 else 0,
             'days': days
         },
-        'isSampleData': data == get_sample_data(start_date, end_date) if 'data' in dir() else False
+        'isSampleData': True
     })
 
 def get_sample_data(start_date, end_date):
@@ -171,7 +171,7 @@ def get_sample_data(start_date, end_date):
         monday, sunday = get_week_range(week_date)
 
         # 只添加在日期范围内的周
-        if start_date <= sunday and end_date >= monday.date():
+        if start_date <= sunday.date() and end_date >= monday.date():
             week_key = format_week_number(week_date)
 
             # 生成随机但合理的示例数据
@@ -189,6 +189,10 @@ def get_sample_data(start_date, end_date):
             })
 
     return sample_data
+
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'ok', 'message': 'WorkBuddy Token Stats is running'})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
