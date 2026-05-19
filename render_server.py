@@ -72,17 +72,16 @@ tr:hover{background:#f8fafc}
 <span style="margin:0 8px;color:#64748b">至</span>
 <div class="date-input" style="display:inline-flex"><input type="date" id="endDate" value="{{END_DATE}}"></div>
 <button class="btn" id="refreshBtn" onclick="loadData()" style="margin-left:16px">🔄 刷新数据</button>
-<span id="dataSource" style="font-size:0.85rem;color:#64748b;margin-left:12px"></span>
 </div>
-<!-- 本地服务离线时的上传区域 -->
-<div id="uploadArea" style="display:none;margin-top:16px;padding:20px;background:#fef3c7;border-radius:12px">
-<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-<p style="color:#92400e;font-size:0.9rem;margin:0">⚠️ 本地服务未运行，可手动上传 traces 数据文件：</p>
+<!-- 上传区域（默认隐藏，本地服务离线时显示） -->
+<div id="uploadArea" style="display:none;margin-top:16px;padding:20px;background:#f0fdf4;border-radius:12px">
+<p style="color:#166534;font-size:0.9rem;margin:0 0 12px 0">📤 请上传 traces JSON 文件：</p>
+<div style="display:flex;gap:12px;flex-wrap:wrap">
 <input type="file" id="fileUpload" accept=".json" multiple style="display:none" onchange="handleFileUpload(this)">
-<button class="btn" onclick="document.getElementById('fileUpload').click()" style="background:#f59e0b">📤 上传 JSON 文件</button>
-<button class="btn" onclick="showUploadHint()" style="background:#6366f1">📋 查看格式说明</button>
+<button class="btn" onclick="document.getElementById('fileUpload').click()" style="background:#16a34a">📁 选择文件</button>
+<button class="btn" onclick="showUploadHint()" style="background:#6366f1">❓ 格式说明</button>
 </div>
-<p id="uploadStatus" style="margin-top:12px;font-size:0.85rem;color:#78350f"></p>
+<p id="uploadStatus" style="margin-top:12px;font-size:0.85rem;color:#166534"></p>
 </div>
 <div class="last-update" id="lastUpdate"></div>
 </div>
@@ -199,10 +198,8 @@ function handleFileUpload(input) {
                     }
                 };
                 
-                status.textContent = '✅ 已读取 ' + traceCount + ' 条记录，是否显示数据？';
+                document.getElementById('uploadStatus').textContent = '✅ 已读取 ' + traceCount + ' 条记录，共 ' + traceCount + ' 个文件';
                 renderData(uploadedData, '上传文件');
-                document.getElementById('dataSource').textContent = '📤 已加载上传文件';
-                document.getElementById('dataSource').style.color = '#10b981';
             }
         };
         reader.readAsText(file);
@@ -244,39 +241,25 @@ async function loadData() {
     const btn = document.getElementById('refreshBtn');
     btn.disabled = true;
     btn.textContent = '⏳ 加载中...';
-    document.getElementById('uploadArea').style.display = 'none';
     
-    // 先尝试从本地服务拉取
+    // 尝试从本地服务拉取
     try {
         const url = 'http://localhost:8081/api/stats?start=' + s + '&end=' + e;
-        const r = await fetch(url, { timeout: 3000 });
+        const r = await fetch(url, { timeout: 2000 });
         if (r.ok) {
             const d = await r.json();
             renderData(d, '本地真实数据');
-            document.getElementById('dataSource').textContent = '✅ 已连接本地服务';
-            document.getElementById('dataSource').style.color = '#10b981';
+            document.getElementById('uploadArea').style.display = 'none';
             btn.disabled = false;
             btn.textContent = '🔄 刷新数据';
             return;
         }
     } catch {}
     
-    // 本地服务离线，尝试云端（模拟数据）
-    try {
-        const url = window.location.origin + '/api/stats?start=' + s + '&end=' + e;
-        const r = await fetch(url);
-        if (r.ok) {
-            const d = await r.json();
-            renderData(d, '云端模拟数据');
-            document.getElementById('dataSource').textContent = '⚠️ 本地服务未运行（显示模拟数据）';
-            document.getElementById('dataSource').style.color = '#f59e0b';
-        }
-    } catch {}
-    
-    // 显示上传区域
+    // 本地服务离线，直接显示上传区域
     document.getElementById('uploadArea').style.display = 'block';
-    document.getElementById('uploadStatus').textContent = '可以上传你的 traces JSON 文件进行分析';
-    
+    document.getElementById('tableContainer').innerHTML = '<div class="tips"><h4>📤 上传数据文件</h4><p>请从 <code>~/.workbuddy/traces/</code> 目录复制 JSON 文件上传</p></div>';
+    document.getElementById('analysisContent').innerHTML = '<div class="tips"><p>上传文件后即可查看统计</p></div>';
     btn.disabled = false;
     btn.textContent = '🔄 刷新数据';
 }
