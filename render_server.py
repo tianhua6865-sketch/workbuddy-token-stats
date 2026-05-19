@@ -65,27 +65,27 @@ tr:hover{background:#f8fafc}
 <header><h1>📊 WorkBuddy Token 使用量统计</h1><p>分析 Litianhua 的 AI 使用情况，优化成本支出</p></header>
 
 <div class="card">
-<div class="card-title">📂 数据源配置</div>
-<div class="date-picker">
-<div style="display:flex;align-items:center;gap:12px">
-<label style="font-weight:500;color:#64748b;font-size:0.9rem">数据路径：</label>
-<button class="btn" onclick="selectFolder()" style="background:#6366f1">📁 选择文件夹</button>
-<input type="text" id="tracesPath" readonly placeholder="未选择（使用默认路径）" style="flex:1;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;background:#f8fafc;color:#64748b">
-</div>
-</div>
+<div class="card-title">📂 数据源</div>
 <div style="margin-top:12px">
-<label style="font-size:0.8rem;color:#64748b">日期范围：</label>
+<label style="font-size:0.9rem;color:#64748b">日期范围：</label>
 <div class="date-input" style="display:inline-flex;margin-left:8px"><input type="date" id="startDate" value="{{START_DATE}}"></div>
 <span style="margin:0 8px;color:#64748b">至</span>
 <div class="date-input" style="display:inline-flex"><input type="date" id="endDate" value="{{END_DATE}}"></div>
 <button class="btn" id="refreshBtn" onclick="loadData()" style="margin-left:16px">🔄 刷新数据</button>
 <span id="dataSource" style="font-size:0.85rem;color:#64748b;margin-left:12px"></span>
 </div>
+<!-- 本地服务离线时的上传区域 -->
+<div id="uploadArea" style="display:none;margin-top:16px;padding:20px;background:#fef3c7;border-radius:12px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+<p style="color:#92400e;font-size:0.9rem;margin:0">⚠️ 本地服务未运行，可手动上传 traces 数据文件：</p>
+<input type="file" id="fileUpload" accept=".json" multiple style="display:none" onchange="handleFileUpload(this)">
+<button class="btn" onclick="document.getElementById('fileUpload').click()" style="background:#f59e0b">📤 上传 JSON 文件</button>
+<button class="btn" onclick="showUploadHint()" style="background:#6366f1">📋 查看格式说明</button>
+</div>
+<p id="uploadStatus" style="margin-top:12px;font-size:0.85rem;color:#78350f"></p>
+</div>
 <div class="last-update" id="lastUpdate"></div>
 </div>
-
-<!-- 隐藏的文件夹选择器 -->
-<input type="file" id="folderPicker" webkitdirectory style="display:none" onchange="handleFolderSelect(this)">
 
 <div class="stats-grid">
 <div class="stat-card"><div class="stat-label">总使用量</div><div class="stat-value" id="totalTokens">--</div><div class="stat-sub">Tokens</div></div>
@@ -101,30 +101,124 @@ tr:hover{background:#f8fafc}
 
 <script>
 let chart = null;
-
-// 从 localStorage 读取保存的路径
-const savedPath = localStorage.getItem('tracesPath') || '';
-
-function selectFolder() {
-    document.getElementById('folderPicker').click();
-}
-
-function handleFolderSelect(input) {
-    if (input.files && input.files.length > 0) {
-        // 获取文件夹路径
-        const fullPath = input.files[0].webkitRelativePath || input.files[0].path;
-        // 提取文件夹路径（去掉文件名部分）
-        const folderPath = fullPath.split('/').slice(0, -1).join('/') || fullPath;
-        
-        if (folderPath) {
-            document.getElementById('tracesPath').value = '/' + folderPath;
-            localStorage.setItem('tracesPath', '/' + folderPath);
-        }
-    }
-}
+let uploadedData = null; // 保存上传的文件数据
 
 function fmt(n) {
     return (n || 0).toLocaleString();
+}
+
+function showUploadHint() {
+    alert('数据格式说明：\n\n请上传 WorkBuddy traces 目录下的 JSON 文件。\n\n每个文件应包含 trace 数据，格式如下：\n\n{\n  "trace": {\n    "startedAt": "2026-05-19T08:00:00.000Z",\n    "modelInfo": {\n      "totalInputTokens": 100000,\n      "totalOutputTokens": 5000,\n      "totalCachedTokens": 80000\n    }\n  }\n}\n\n可以从 ~/.workbuddy/traces/ 目录复制文件上传。');
+}
+
+function handleFileUpload(input) {
+    const files = input.files;
+    if (!files || files.length === 0) return;
+    
+    const status = document.getElementById('uploadStatus');
+    status.textContent = '正在读取文件...';
+    
+    let processed = 0;
+    let totalInput = 0, totalOutput = 0, totalCached = 0;
+    let traceCount = 0;
+    const start = document.getElementById('startDate').value;
+    const end = document.getElementById('endDate').value;
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    
+    // 按周分组
+    const weekData = {};
+    
+    for (const file of files) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                const trace = data.trace || {};
+                const startedAt = trace.startedAt;
+                
+                if (startedAt) {
+                    const traceDate = new Date(startedAt);
+                    if (traceDate >= startDate && traceDate <= endDate) {
+                        traceCount++;
+                        const modelInfo = trace.modelInfo || {};
+                        const input = modelInfo.totalInputTokens || 0;
+                        const output = modelInfo.totalOutputTokens || 0;
+                        const cached = modelInfo.totalCachedTokens || 0;
+                        
+                        totalInput += input;
+                        totalOutput += output;
+                        totalCached += cached;
+                        
+                        // 计算周
+                        const day = traceDate.getDay();
+                        const monday = new Date(traceDate);
+                        monday.setDate(traceDate.getDate() - (day === 0 ? 6 : day - 1));
+                        const sunday = new Date(monday);
+                        sunday.setDate(monday.getDate() + 6);
+                        
+                        const weekKey = monday.toISOString().split('T')[0];
+                        if (!weekData[weekKey]) {
+                            weekData[weekKey] = {
+                                week: (monday.getFullYear()) + '-W' + getWeekNumber(monday),
+                                dateRange: formatMD(monday) + ' ~ ' + formatMD(sunday),
+                                input: 0, output: 0, cached: 0, total: 0
+                            };
+                        }
+                        weekData[weekKey].input += input;
+                        weekData[weekKey].output += output;
+                        weekData[weekKey].cached += cached;
+                        weekData[weekKey].total += input + output;
+                    }
+                }
+            } catch (err) {
+                console.error('Parse error:', file.name, err);
+            }
+            
+            processed++;
+            status.textContent = `已处理 ${processed}/${files.length} 个文件...`;
+            
+            if (processed === files.length) {
+                const weeks = Object.values(weekData).sort((a, b) => a.week.localeCompare(b.week));
+                const total = totalInput + totalOutput;
+                const cacheRate = total > 0 ? (totalCached / (totalInput + totalOutput) * 100) : 0;
+                
+                uploadedData = {
+                    period: start + ' ~ ' + end,
+                    weeks: weeks,
+                    summary: {
+                        total: total,
+                        totalInput: totalInput,
+                        totalOutput: totalOutput,
+                        totalCached: totalCached,
+                        cacheRate: Math.round(cacheRate * 10) / 10,
+                        activeWeeks: weeks.length,
+                        dailyAvg: Math.round(total / Math.max((endDate - startDate) / 86400000 + 1, 1)),
+                        days: Math.round((endDate - startDate) / 86400000 + 1),
+                        traceCount: traceCount
+                    }
+                };
+                
+                status.textContent = '✅ 已读取 ' + traceCount + ' 条记录，是否显示数据？';
+                renderData(uploadedData, '上传文件');
+                document.getElementById('dataSource').textContent = '📤 已加载上传文件';
+                document.getElementById('dataSource').style.color = '#10b981';
+            }
+        };
+        reader.readAsText(file);
+    }
+}
+
+function getWeekNumber(date) {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function formatMD(date) {
+    return (date.getMonth() + 1).toString().padStart(2, '0') + '-' + date.getDate().toString().padStart(2, '0');
 }
 
 function renderData(d, source) {
@@ -142,55 +236,50 @@ function renderData(d, source) {
 async function loadData() {
     const s = document.getElementById('startDate').value;
     const e = document.getElementById('endDate').value;
-    const path = document.getElementById('tracesPath').value.trim();
-    
     if (!s || !e) {
         alert('请选择日期范围');
         return;
     }
     
-    // 保存路径到 localStorage
-    if (path) {
-        localStorage.setItem('tracesPath', path);
-    }
-    
     const btn = document.getElementById('refreshBtn');
     btn.disabled = true;
     btn.textContent = '⏳ 加载中...';
+    document.getElementById('uploadArea').style.display = 'none';
     
-    // 先尝试获取本地数据
+    // 先尝试从本地服务拉取
     try {
-        let url = 'http://localhost:8081/api/stats?start=' + s + '&end=' + e;
-        if (path) {
-            url += '&path=' + encodeURIComponent(path);
-        }
-        const r = await fetch(url, { timeout: 5000 });
+        const url = 'http://localhost:8081/api/stats?start=' + s + '&end=' + e;
+        const r = await fetch(url, { timeout: 3000 });
         if (r.ok) {
             const d = await r.json();
             renderData(d, '本地真实数据');
-            document.getElementById('dataSource').textContent = '✅ 已连接本地数据';
+            document.getElementById('dataSource').textContent = '✅ 已连接本地服务';
             document.getElementById('dataSource').style.color = '#10b981';
-        } else {
-            throw new Error('not ok');
+            btn.disabled = false;
+            btn.textContent = '🔄 刷新数据';
+            return;
         }
-    } catch {
-        // 本地服务不可用，尝试云端
-        try {
-            const url = window.location.origin + '/api/stats?start=' + s + '&end=' + e;
-            const r = await fetch(url);
-            if (r.ok) {
-                const d = await r.json();
-                renderData(d, '云端数据');
-                document.getElementById('dataSource').textContent = '⚠️ 本地服务未启动';
-                document.getElementById('dataSource').style.color = '#f59e0b';
-            } else {
-                throw new Error('云端服务异常');
-            }
-        } catch (err) {
-            console.error('Error:', err);
-            document.getElementById('tableContainer').innerHTML = '<div class="error">⚠️ 数据加载失败: ' + err.message + '</div>';
-            document.getElementById('dataSource').textContent = '❌ 数据加载失败';
-            document.getElementById('dataSource').style.color = '#ef4444';
+    } catch {}
+    
+    // 本地服务离线，尝试云端（模拟数据）
+    try {
+        const url = window.location.origin + '/api/stats?start=' + s + '&end=' + e;
+        const r = await fetch(url);
+        if (r.ok) {
+            const d = await r.json();
+            renderData(d, '云端模拟数据');
+            document.getElementById('dataSource').textContent = '⚠️ 本地服务未运行（显示模拟数据）';
+            document.getElementById('dataSource').style.color = '#f59e0b';
+        }
+    } catch {}
+    
+    // 显示上传区域
+    document.getElementById('uploadArea').style.display = 'block';
+    document.getElementById('uploadStatus').textContent = '可以上传你的 traces JSON 文件进行分析';
+    
+    btn.disabled = false;
+    btn.textContent = '🔄 刷新数据';
+}
         }
     } finally {
         btn.disabled = false;
@@ -256,12 +345,8 @@ function generateAnalysis(d) {
     document.getElementById('analysisContent').innerHTML = html;
 }
 
-// 初始化路径输入框
+// 页面加载后自动获取数据
 window.addEventListener('DOMContentLoaded', function() {
-    const pathInput = document.getElementById('tracesPath');
-    if (savedPath) {
-        pathInput.value = savedPath;
-    }
     loadData();
 });
 </script>
